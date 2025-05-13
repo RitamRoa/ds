@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h2>Order Management</h2>
+    </div>
+    <div class="col-md-6 text-end">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#restockModal">
+            <i class="fas fa-box"></i> Restock Items
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Active Orders</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Table</th>
+                                <th>Items</th>
+                                <th>Total</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in orders %}
+                            <tr>
+                                <td>#{{ order.id }}</td>
+                                <td>{{ order.table_number }}</td>
+                                <td>
+                                    {% for item in order.items %}
+                                    <div>{{ item.quantity }}x {{ item.menu_item.name }}</div>
+                                    {% endfor %}
+                                </td>
+                                <td>₹{{ "%.2f"|format(order.total_amount) }}</td>
+                                <td>
+                                    <span class="order-status status-{{ order.status }}">
+                                        {{ order.status|title }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <select class="form-select form-select-sm" onchange="updateOrderStatus('{{ order.id }}', this.value)">
+                                        <option value="pending" {% if order.status == 'pending' %}selected{% endif %}>Pending</option>
+                                        <option value="preparing" {% if order.status == 'preparing' %}selected{% endif %}>Preparing</option>
+                                        <option value="ready" {% if order.status == 'ready' %}selected{% endif %}>Ready</option>
+                                        <option value="delivered" {% if order.status == 'delivered' %}selected{% endif %}>Delivered</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Stock Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    {% for item in menu_items %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ item.name }}</h6>
+                                <small class="text-muted">Current stock: {{ item.stock }}</small>
+                            </div>
+                            <span class="badge {% if item.stock < 10 %}bg-danger{% elif item.stock < 20 %}bg-warning{% else %}bg-success{% endif %}">
+                                {{ item.stock }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Restock Modal -->
+<div class="modal fade" id="restockModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Restock Items</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="list-group">
+                    {% for item in menu_items %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">{{ item.name }}</h6>
+                                <small class="text-muted">Current stock: {{ item.stock }}</small>
+                            </div>
+                            <div class="input-group" style="width: 150px;">
+                                <input type="number" class="form-control form-control-sm" id="restock-{{ item.id }}" min="0" value="0">
+                                <button class="btn btn-outline-primary btn-sm" onclick="restockItem('{{ item.id }}')">Add</button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateOrderStatus(orderId, status) {
+    fetch(`/update_order_status/${orderId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: status })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+        } else {
+            location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while updating the order status');
+    });
+}
+
+function restockItem(itemId) {
+    const quantity = parseInt(document.getElementById(`restock-${itemId}`).value);
+    if (quantity <= 0) {
+        alert('Please enter a valid quantity');
+        return;
+    }
+
+    fetch('/restock', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            id: itemId,
+            quantity: quantity
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+        } else {
+            location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while restocking the item');
+    });
+}
+</script>
+{% endblock %} 

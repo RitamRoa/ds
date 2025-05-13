@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h2>Our Menu</h2>
+    </div>
+    <div class="col-md-4">
+        <div class="input-group mb-2">
+            <input type="number" id="tableNumber" class="form-control" placeholder="Table Number" min="1">
+            <input type="text" id="customerName" class="form-control" placeholder="Customer Name">
+            <button class="btn btn-primary" id="addToQueue">Add to Queue</button>
+        </div>
+    </div>
+</div>
+
+<div class="row" id="menuItems" data-ids='[{% for item in menu_items %}"{{ item.id }}"{% if not loop.last %},{% endif %}{% endfor %}]'>
+    {% for item in menu_items %}
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">{{ item.name }}</h5>
+                <p class="card-text">{{ item.description }}</p>
+                <p class="card-text">
+                    <strong>Price:</strong> ₹{{ "%.2f"|format(item.price) }}<br>
+                    <strong>Stock:</strong> {{ item.stock }}
+                </p>
+                <div class="input-group">
+                    <button class="btn btn-outline-secondary" onclick="decrementQuantity('{{ item.id }}')">-</button>
+                    <input type="number" class="form-control text-center" id="quantity-{{ item.id }}" value="0" min="0" max="{{ item.stock }}">
+                    <button class="btn btn-outline-secondary" onclick="incrementQuantity('{{ item.id }}', '{{ item.stock }}')">+</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Orders Table -->
+<div class="row mt-5">
+    <div class="col-12">
+        <h4>Current Orders</h4>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Table Number</th>
+                    <th>Customer Name</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="ordersTableBody">
+                {% for order in orders %}
+                <tr>
+                    <td>{{ order.table_number }}</td>
+                    <td>{{ order.customer_name }}</td>
+                    <td>{{ order.status|title }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let orderItems = {};
+const menuItemIds = JSON.parse(document.getElementById('menuItems').dataset.ids);
+
+function incrementQuantity(itemId, maxStock) {
+    const input = document.getElementById(`quantity-${itemId}`);
+    if (parseInt(input.value) < maxStock) {
+        input.value = parseInt(input.value) + 1;
+        updateOrderItems();
+    }
+}
+
+function decrementQuantity(itemId) {
+    const input = document.getElementById(`quantity-${itemId}`);
+    if (parseInt(input.value) > 0) {
+        input.value = parseInt(input.value) - 1;
+        updateOrderItems();
+    }
+}
+
+function updateOrderItems() {
+    orderItems = {};
+    menuItemIds.forEach(itemId => {
+        const quantity = parseInt(document.getElementById(`quantity-${itemId}`).value);
+        if (quantity > 0) {
+            orderItems[itemId] = quantity;
+        }
+    });
+}
+
+function refreshOrdersTable() {
+    fetch('/get_orders')
+        .then(response => response.json())
+        .then(orders => {
+            const tbody = document.getElementById('ordersTableBody');
+            tbody.innerHTML = orders.map(order => `
+                <tr>
+                    <td>${order.table_number}</td>
+                    <td>${order.customer_name}</td>
+                    <td>${order.status}</td>
+                </tr>
+            `).join('');
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+document.getElementById('addToQueue').addEventListener('click', function() {
+    const tableNumber = document.getElementById('tableNumber').value;
+    const customerName = document.getElementById('customerName').value;
+    updateOrderItems();
+    
+    if (!tableNumber) {
+        alert('Please enter a table number');
+        return;
+    }
+    if (!customerName) {
+        alert('Please enter a customer name');
+        return;
+    }
+    const hasItems = Object.keys(orderItems).length > 0;
+    if (!hasItems) {
+        alert('Please add items to your order');
+        return;
+    }
+    
+    fetch('/place_order', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            table_number: parseInt(tableNumber),
+            customer_name: customerName,
+            items: Object.entries(orderItems).map(([id, quantity]) => ({
+                id: parseInt(id),
+                quantity: quantity
+            }))
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+        } else {
+            alert('Order added to queue!');
+            // Clear the form
+            document.getElementById('tableNumber').value = '';
+            document.getElementById('customerName').value = '';
+            menuItemIds.forEach(itemId => {
+                document.getElementById(`quantity-${itemId}`).value = '0';
+            });
+            // Refresh the orders table
+            refreshOrdersTable();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while placing the order');
+    });
+});
+</script>
+{% endblock %} 
